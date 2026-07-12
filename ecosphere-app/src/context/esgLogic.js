@@ -54,6 +54,29 @@ export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+export function addComplianceIssue(issues, newIssue) {
+  const issueToAdd = {
+    id: Date.now(),
+    status: 'Open',
+    ...newIssue,
+  };
+
+  return [issueToAdd, ...issues];
+}
+
+export function formatDateForExport(value) {
+  if (value === null || value === undefined || value === '') return '';
+
+  const parsedDate = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) return String(value);
+
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(parsedDate);
+}
+
 export function updateComplianceIssueStatus(issues, issueId, nextStatus) {
   return issues.map((issue) => (issue.id === issueId ? { ...issue, status: nextStatus } : issue));
 }

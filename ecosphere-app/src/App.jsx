@@ -3,7 +3,7 @@ import ESGScene from './components/ESGScene';
 import NotificationGuide from './components/NotificationGuide';
 import CriteriaPanel from './components/CriteriaPanel';
 import { useESG } from './context/useESG';
-import { validateEvidenceFile } from './context/esgLogic';
+import { formatDateForExport, validateEvidenceFile } from './context/esgLogic';
 
 const rewardItems = [
   { name: 'Solar Desk Lamp', cost: 180, emoji: '🔆' },
@@ -38,11 +38,14 @@ function App() {
     attachEvidenceAndSubmit,
     closeSubmissionModal,
     updateIssueStatus,
+    addComplianceIssue,
     refreshLiveMetrics,
     lastSyncedAt,
   } = useESG();
 
   const [dragActive, setDragActive] = useState(false);
+  const [newIssueForm, setNewIssueForm] = useState({ desc: '', owner: '', dueDate: '', priority: 'High' });
+  const [issueFormError, setIssueFormError] = useState('');
   const [selectedFileName, setSelectedFileName] = useState('');
   const [uploadError, setUploadError] = useState('');
 
@@ -54,6 +57,20 @@ function App() {
     if (!lastSyncedAt) return 'Never synced';
     return new Date(lastSyncedAt).toLocaleString();
   }, [lastSyncedAt]);
+
+  const complianceSummary = useMemo(() => {
+    const open = complianceIssues.filter((issue) => issue.status === 'Open').length;
+    const overdue = complianceIssues.filter((issue) => issue.status === 'Overdue').length;
+    const resolved = complianceIssues.filter((issue) => issue.status === 'Resolved').length;
+    return { open, overdue, resolved };
+  }, [complianceIssues]);
+
+  const formatDisplayDate = (value) => {
+    if (!value) return 'No date set';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   const platformPillars = [
     {
@@ -109,6 +126,25 @@ function App() {
     attachEvidenceAndSubmit(file.name);
   };
 
+  const handleAddComplianceIssue = (event) => {
+    event.preventDefault();
+
+    if (!newIssueForm.desc.trim() || !newIssueForm.owner.trim() || !newIssueForm.dueDate) {
+      setIssueFormError('Please add a title, owner, and due date before saving.');
+      return;
+    }
+
+    addComplianceIssue({
+      desc: newIssueForm.desc.trim(),
+      owner: newIssueForm.owner.trim(),
+      dueDate: newIssueForm.dueDate,
+      priority: newIssueForm.priority,
+    });
+
+    setNewIssueForm({ desc: '', owner: '', dueDate: '', priority: 'High' });
+    setIssueFormError('');
+  };
+
   const handleExportSnapshot = () => {
     // Export a human-friendly CSV snapshot that includes top-level metrics and judging criteria if present
     const criteriaRaw = window.localStorage.getItem('ecosphere-criteria');
@@ -127,7 +163,7 @@ function App() {
     rows.push([]);
     rows.push(['Compliance issues']);
     rows.push(['Desc', 'Owner', 'Due', 'Status']);
-    complianceIssues.forEach((i) => rows.push([i.desc, i.owner, i.dueDate, i.status]));
+    complianceIssues.forEach((i) => rows.push([i.desc, i.owner, formatDateForExport(i.dueDate), i.status]));
     rows.push([]);
     if (criteria.length) {
       rows.push(['Judging criteria']);
@@ -135,8 +171,8 @@ function App() {
       criteria.forEach((c) => rows.push([c.title, c.weight, c.desc]));
     }
 
-    const csv = rows.map((r) => r.map((cell) => `"${String(cell ?? '')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csv = `\uFEFF${rows.map((r) => r.map((cell) => `"${String(cell ?? '')}"`).join(',')).join('\n')}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -153,7 +189,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_30%),linear-gradient(135deg,_#020617_0%,_#0f172a_45%,_#111827_100%)] px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(182,162,127,0.22),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(129,173,138,0.18),_transparent_30%),linear-gradient(135deg,_#f8f2e8_0%,_#f5ece0_46%,_#efe4d4_100%)] px-4 py-6 text-[#2f2a24] sm:px-6 lg:px-8">
       {recentNotification && (
         <NotificationGuide
           message={recentNotification.message}
@@ -215,32 +251,32 @@ function App() {
       )}
 
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <header className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/25 backdrop-blur-xl">
+        <header className="rounded-[32px] border border-stone-200/90 bg-[#fcfaf7]/95 p-8 shadow-[0_22px_60px_rgba(87,67,35,0.10)] backdrop-blur-2xl">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
-              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.3em] text-emerald-400">EcoSphere • Enterprise ESG Command Center</p>
-              <h1 className="text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">A futuristic workspace for sustainability, compliance, and motivation.</h1>
-              <p className="mt-3 text-sm text-slate-400 sm:text-base">
-                Live carbon intelligence, governance visibility, and premium employee engagement all in one cinematic control room.
+              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.22em] text-[#6d7b62]">EcoSphere • Enterprise ESG Command Center</p>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#2f2a24] leading-tight">A modern workspace for sustainability, compliance, and motivation</h1>
+              <p className="mt-2 text-sm text-[#6b5a42] sm:text-base">
+                Live ESG insights, governance clarity, and team engagement — designed for people, not machines.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">XP balance</p>
-                <p className="text-2xl font-black text-amber-400">{userXP}</p>
+              <div className="rounded-2xl border border-[#d9c8a6] bg-[#f7efe2] px-4 py-3 text-center">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-[#846f57]">XP balance</p>
+                <p className="text-2xl font-black text-[#9b6a2f]">{userXP}</p>
               </div>
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">Data coverage</p>
-                <p className="text-xl font-black text-emerald-300">{dataCoverage}%</p>
+              <div className="rounded-2xl border border-[#b9cfb3] bg-[#eef5e8] px-4 py-3 text-center">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-[#6d7b62]">Data coverage</p>
+                <p className="text-xl font-black text-[#4e6b47]">{dataCoverage}%</p>
               </div>
-              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">Automation</p>
-                <p className="text-xl font-black text-cyan-300">{automationLevel}%</p>
+              <div className="rounded-2xl border border-[#b8d7d3] bg-[#edf7f4] px-4 py-3 text-center">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-[#5f726f]">Automation</p>
+                <p className="text-xl font-black text-[#3c6d67]">{automationLevel}%</p>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-stone-200 bg-[#f6ebdc] p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-200">Live sync state</p>
               <p className="text-sm text-slate-400">Last update: {lastSyncLabel}</p>
@@ -248,13 +284,13 @@ function App() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={refreshLiveMetrics}
-                className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400/20"
+                className="rounded-2xl border border-[#b8d7d3] bg-[#edf7f4] px-4 py-2 text-sm font-semibold text-[#3c6d67] transition hover:bg-[#e2f1ed]"
               >
                 Refresh metrics
               </button>
               <button
                 onClick={handleExportSnapshot}
-                className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/20"
+                className="rounded-2xl border border-[#b9cfb3] bg-[#eef5e8] px-4 py-2 text-sm font-semibold text-[#4e6b47] transition hover:bg-[#e4f0df]"
               >
                 Export snapshot
               </button>
@@ -262,7 +298,7 @@ function App() {
           </div>
         </header>
 
-        <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+        <section className="rounded-[32px] border border-stone-200/90 bg-[#fcfaf7]/95 p-6 shadow-[0_18px_45px_rgba(87,67,35,0.08)] backdrop-blur-2xl">
           <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-400">Platform purpose</p>
@@ -284,7 +320,7 @@ function App() {
 
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[32px] border border-stone-200/90 bg-[#fcfaf7]/95 p-8 shadow-[0_18px_45px_rgba(87,67,35,0.08)] backdrop-blur-2xl">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="max-w-xl">
                   <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">Weighted ESG intelligence</p>
@@ -293,7 +329,7 @@ function App() {
                     Environmental at 40%, social at 30%, and governance at 30% combine into a living health score for your enterprise.
                   </p>
                 </div>
-                <div className="flex items-center gap-5 rounded-3xl border border-slate-700/70 bg-slate-950/70 p-4">
+                <div className="flex items-center gap-5 rounded-3xl border border-stone-200 bg-[#f7efe2] p-4">
                   <div
                     className="flex h-24 w-24 items-center justify-center rounded-full border-[8px] border-slate-800"
                     style={{ background: `conic-gradient(#34d399 ${overallScore * 3.6}deg, rgba(15,23,42,0.95) 0deg)` }}
@@ -312,7 +348,7 @@ function App() {
 
               <div className="mt-6 grid gap-4 md:grid-cols-3">
                 {departments.map((dept) => (
-                  <div key={dept.id} className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
+                  <div key={dept.id} className="rounded-2xl border border-stone-200 bg-[#f7efe2] p-4">
                     <div className="flex items-center justify-between">
                       <p className="font-semibold text-slate-200">{dept.name}</p>
                       <span className="text-sm font-bold text-emerald-400">{Math.round((dept.env + dept.soc + dept.gov) / 3)}</span>
@@ -327,7 +363,7 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[28px] border border-stone-200/90 bg-[#fffaf4] p-8 shadow-[0_14px_35px_rgba(87,67,35,0.07)] backdrop-blur-xl">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">3D ecosystem monitor</p>
@@ -342,7 +378,7 @@ function App() {
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[32px] border border-stone-200/90 bg-[#fcfaf7]/95 p-8 shadow-[0_18px_45px_rgba(87,67,35,0.08)] backdrop-blur-2xl">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-400">Governance logs</p>
@@ -352,59 +388,123 @@ function App() {
                   {complianceIssues.length} active issues
                 </span>
               </div>
+              <div className="mb-4 grid gap-3 rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-cyan-500/10 via-emerald-500/10 to-fuchsia-500/10 p-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Open</p>
+                  <p className="mt-1 text-xl font-black text-cyan-300">{complianceSummary.open}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Overdue</p>
+                  <p className="mt-1 text-xl font-black text-rose-300">{complianceSummary.overdue}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.25em] text-slate-400">Resolved</p>
+                  <p className="mt-1 text-xl font-black text-emerald-300">{complianceSummary.resolved}</p>
+                </div>
+              </div>
+              <form onSubmit={handleAddComplianceIssue} className="mb-4 space-y-3 rounded-2xl border border-stone-200 bg-[#fdf8f0] p-4">
+                <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
+                  <label className="text-sm text-slate-300">
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-slate-500">Issue title</span>
+                    <input
+                      value={newIssueForm.desc}
+                      onChange={(event) => setNewIssueForm((prev) => ({ ...prev, desc: event.target.value }))}
+                      className="w-full rounded-xl border border-stone-300 bg-[#fffdf9] px-3 py-2 text-sm text-[#2f2a24] outline-none ring-0"
+                      placeholder="Renewal review"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-300">
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-slate-500">Owner</span>
+                    <input
+                      value={newIssueForm.owner}
+                      onChange={(event) => setNewIssueForm((prev) => ({ ...prev, owner: event.target.value }))}
+                      className="w-full rounded-xl border border-stone-300 bg-[#fffdf9] px-3 py-2 text-sm text-[#2f2a24] outline-none ring-0"
+                      placeholder="Ava Chen"
+                    />
+                  </label>
+                  <label className="text-sm text-slate-300">
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-slate-500">Due date</span>
+                    <input
+                      type="date"
+                      value={newIssueForm.dueDate}
+                      onChange={(event) => setNewIssueForm((prev) => ({ ...prev, dueDate: event.target.value }))}
+                      className="w-full rounded-xl border border-stone-300 bg-[#fffdf9] px-3 py-2 text-sm text-[#2f2a24] outline-none ring-0"
+                    />
+                  </label>
+                </div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <label className="text-sm text-slate-300">
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-slate-500">Priority</span>
+                    <select
+                      value={newIssueForm.priority}
+                      onChange={(event) => setNewIssueForm((prev) => ({ ...prev, priority: event.target.value }))}
+                      className="rounded-xl border border-stone-300 bg-[#fffdf9] px-3 py-2 text-sm text-[#2f2a24] outline-none"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </label>
+                  <button type="submit" className="rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:opacity-90">
+                    Add governance item
+                  </button>
+                </div>
+                {issueFormError && <p className="text-sm text-rose-300">{issueFormError}</p>}
+              </form>
               <div className="space-y-3">
                 {complianceIssues.map((issue) => {
-                  const isOverdue = issue.status === 'Overdue';
-                  const isResolved = issue.status === 'Resolved';
-                  const badgeClasses = isOverdue
-                    ? 'border border-rose-400/30 bg-rose-400/10 text-rose-300'
-                    : isResolved
-                      ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
-                      : 'border border-amber-400/20 bg-amber-400/10 text-amber-300';
+                    const isOverdue = issue.status === 'Overdue';
+                    const isResolved = issue.status === 'Resolved';
+                    const badgeClasses = isOverdue
+                      ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                      : isResolved
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border border-amber-200 bg-amber-50 text-amber-700';
 
-                  return (
-                    <div key={issue.id} className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-slate-200">{issue.desc}</p>
-                          <p className="mt-1 text-xs text-slate-400">Owner: {issue.owner} • Due {issue.dueDate}</p>
+                    return (
+                      <div key={issue.id} className="rounded-2xl border border-stone-200 bg-[#f7efe2] p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-[#2f2a24]">{issue.desc}</p>
+                            <p className="mt-1 text-xs text-[#6b5a42]">Owner: {issue.owner} • Due {formatDisplayDate(issue.dueDate)}</p>
+                            {issue.priority && <p className="mt-1 text-[11px] uppercase tracking-[0.25em] text-[#6d7b62]">Priority: {issue.priority}</p>}
+                          </div>
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${badgeClasses}`}>
+                            {issue.status}
+                          </span>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${badgeClasses}`}>
-                          {issue.status}
-                        </span>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            onClick={() => updateIssueStatus(issue.id, 'Open')}
+                            className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Open' ? 'bg-[#fff2d6] text-[#7a5a1f] border border-[#f1d9a8]' : 'bg-white border border-stone-200 text-[#6b5a42] hover:bg-[#fff7ec]'}`}
+                          >
+                            Open
+                          </button>
+                          <button
+                            onClick={() => updateIssueStatus(issue.id, 'Overdue')}
+                            className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Overdue' ? 'bg-[#ffd6d6] text-[#8a2b2b] border border-[#f3c2c2]' : 'bg-white border border-stone-200 text-[#6b5a42] hover:bg-[#fff2f2]'}`}
+                          >
+                            Overdue
+                          </button>
+                          <button
+                            onClick={() => updateIssueStatus(issue.id, 'Resolved')}
+                            className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Resolved' ? 'bg-[#e8f7ee] text-[#2d6a3c] border border-[#cfead6]' : 'bg-white border border-stone-200 text-[#6b5a42] hover:bg-[#f3fff6]'}`}
+                          >
+                            Resolve
+                          </button>
+                        </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          onClick={() => updateIssueStatus(issue.id, 'Open')}
-                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Open' ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'}`}
-                        >
-                          Open
-                        </button>
-                        <button
-                          onClick={() => updateIssueStatus(issue.id, 'Overdue')}
-                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Overdue' ? 'bg-rose-400/20 text-rose-300' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'}`}
-                        >
-                          Overdue
-                        </button>
-                        <button
-                          onClick={() => updateIssueStatus(issue.id, 'Resolved')}
-                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Resolved' ? 'bg-emerald-400/20 text-emerald-300' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'}`}
-                        >
-                          Resolve
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[32px] border border-stone-200/90 bg-[#fcfaf7]/95 p-8 shadow-[0_18px_45px_rgba(87,67,35,0.08)] backdrop-blur-2xl">
               <div className="mb-4">
-                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">Challenge workflow</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[#5b7d5a]">Challenge workflow</p>
                 <h3 className="text-xl font-bold text-slate-100">Submit work for manager review</h3>
               </div>
-              <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
+              <div className="rounded-2xl border border-stone-200 bg-[#f7efe2] p-4">
                 <p className="text-sm text-slate-400">
                   {challengeStatus === 'reviewing'
                     ? 'Your submission is under manager review and the interface is locked until approval completes.'
@@ -425,9 +525,9 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[32px] border border-stone-200/90 bg-[#fcfaf7]/95 p-8 shadow-[0_18px_45px_rgba(87,67,35,0.08)] backdrop-blur-2xl">
               <div className="mb-4">
-                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">System controls</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[#5b7d5a]">System controls</p>
                 <h3 className="text-xl font-bold text-slate-100">Operational rules</h3>
               </div>
               <div className="space-y-4">
@@ -436,7 +536,7 @@ function App() {
                   { label: 'Evidence validation', description: 'Require proof before compliance approval', key: 'evidenceRequired' },
                   { label: 'Badge auto-award', description: 'Unlock achievements the moment milestones are met', key: 'badgeAutoAward' },
                 ].map((item) => (
-                  <label key={item.key} className="flex items-start justify-between gap-3 rounded-2xl border border-slate-800/70 bg-slate-950/70 p-3">
+                  <label key={item.key} className="flex items-start justify-between gap-3 rounded-2xl border border-stone-200 bg-[#f7efe2] p-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-200">{item.label}</p>
                       <p className="mt-1 text-xs text-slate-400">{item.description}</p>
@@ -454,7 +554,7 @@ function App() {
           </div>
         </div>
 
-        <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+        <section className="rounded-[32px] border border-stone-200/90 bg-[#fcfaf7]/95 p-8 shadow-[0_18px_45px_rgba(87,67,35,0.08)] backdrop-blur-2xl">
           <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-400">Gamified storefront</p>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ESGContext } from './ESGContextValue';
-import { calculateOverallScore, clamp, getChallengeOutcome, updateComplianceIssueStatus } from './esgLogic';
+import { addComplianceIssue as addComplianceIssueToList, calculateOverallScore, clamp, getChallengeOutcome, updateComplianceIssueStatus } from './esgLogic';
 
 const defaultSettings = {
   autoEmissionCalc: true,
@@ -146,6 +146,15 @@ export const ESGProvider = ({ children }) => {
     setLastSyncedAt(new Date().toISOString());
   };
 
+  const addComplianceIssue = (newIssue) => {
+    setComplianceIssues((prevIssues) => addComplianceIssueToList(prevIssues, newIssue));
+    setRecentNotification({
+      type: 'approval',
+      message: `New compliance issue added for ${newIssue.owner}.`,
+    });
+    setLastSyncedAt(new Date().toISOString());
+  };
+
   const refreshLiveMetrics = () => {
     setDepartments((prevDepartments) =>
       prevDepartments.map((department, index) => ({
@@ -225,6 +234,7 @@ export const ESGProvider = ({ children }) => {
       attachEvidenceAndSubmit,
       closeSubmissionModal,
       updateIssueStatus,
+      addComplianceIssue,
       refreshLiveMetrics,
       lastSyncedAt,
       challengeOutcome: getChallengeOutcome(settings, challengeStatus),

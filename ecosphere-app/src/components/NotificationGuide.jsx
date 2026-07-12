@@ -30,18 +30,19 @@ export default function NotificationGuide({ message, type, onDismiss }) {
   return (
     <div
       ref={cardRef}
-      className="fixed right-5 top-5 z-[60] flex max-w-sm items-center gap-3 rounded-2xl border border-emerald-400/30 bg-slate-950/90 p-4 shadow-2xl backdrop-blur"
+      className="fixed right-5 top-5 z-[60] flex max-w-sm items-center gap-3 rounded-2xl border border-amber-300/20 bg-gradient-to-br from-slate-900/95 to-stone-800/85 p-4 shadow-2xl backdrop-blur"
+      style={{minWidth: 320}}
     >
       <div ref={faceRef} className="flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/40 bg-gradient-to-br from-cyan-400/20 to-emerald-400/20 text-3xl">
         {type === 'badge' ? '🏅' : type === 'reward' ? '🎁' : type === 'approval' ? '🧑‍💼' : '⚡'}
       </div>
       <div className="flex-1">
-        <p className="text-sm font-semibold text-slate-100">{message}</p>
-        <p className="mt-1 text-xs text-slate-400">Realtime EcoSphere update</p>
+        <p className="text-sm font-semibold text-white">{message}</p>
+        <p className="mt-1 text-xs text-amber-200">Realtime EcoSphere update</p>
       </div>
       <button
         onClick={onDismiss}
-        className="rounded-full border border-slate-700/70 px-2 py-1 text-xs text-slate-300 transition hover:bg-slate-800"
+        className="rounded-full border border-amber-200/20 px-2 py-1 text-xs text-white transition hover:bg-amber-600/10"
       >
         ×
       </button>
