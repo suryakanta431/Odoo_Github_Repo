@@ -1,6 +1,9 @@
+import { useMemo, useState } from 'react';
 import ESGScene from './components/ESGScene';
 import NotificationGuide from './components/NotificationGuide';
+import CriteriaPanel from './components/CriteriaPanel';
 import { useESG } from './context/useESG';
+import { validateEvidenceFile } from './context/esgLogic';
 
 const rewardItems = [
   { name: 'Solar Desk Lamp', cost: 180, emoji: '🔆' },
@@ -21,16 +24,133 @@ function App() {
     setSettings,
     departments,
     userXP,
-    setUserXP,
     unlockedBadges,
     complianceIssues,
     overallScore,
     redeemReward,
     recentNotification,
     setRecentNotification,
+    redeemedRewards,
+    challengeStatus,
+    submissionModalOpen,
+    pendingSubmission,
+    submitChallenge,
+    attachEvidenceAndSubmit,
+    closeSubmissionModal,
+    updateIssueStatus,
+    refreshLiveMetrics,
+    lastSyncedAt,
   } = useESG();
 
+  const [dragActive, setDragActive] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState('');
+  const [uploadError, setUploadError] = useState('');
+
   const scoreTone = overallScore >= 80 ? 'text-emerald-400' : overallScore >= 60 ? 'text-cyan-400' : 'text-amber-400';
+  const dataCoverage = Math.min(98, 80 + departments.length * 6 + (settings.autoEmissionCalc ? 4 : 0));
+  const automationLevel = settings.autoEmissionCalc && settings.evidenceRequired ? 92 : settings.autoEmissionCalc ? 84 : 71;
+  const participationMomentum = Math.min(99, 72 + Math.round(userXP / 120));
+  const lastSyncLabel = useMemo(() => {
+    if (!lastSyncedAt) return 'Never synced';
+    return new Date(lastSyncedAt).toLocaleString();
+  }, [lastSyncedAt]);
+
+  const platformPillars = [
+    {
+      title: 'Unify data',
+      icon: '🧩',
+      body: 'Link operations, compliance, and employee participation into a single live ESG control tower.',
+      metric: `${dataCoverage}% coverage`,
+      accent: 'from-emerald-500/20 to-emerald-400/5',
+    },
+    {
+      title: 'Automate tracking',
+      icon: '⚙️',
+      body: 'Convert operational records into carbon insights and governance reporting with automated workflows.',
+      metric: `${automationLevel}% automated`,
+      accent: 'from-cyan-500/20 to-cyan-400/5',
+    },
+    {
+      title: 'Drive engagement',
+      icon: '🎯',
+      body: 'Use challenges, XP, badges, and rewards to turn ESG participation into daily habit.',
+      metric: `${participationMomentum}% participation`,
+      accent: 'from-amber-500/20 to-amber-400/5',
+    },
+    {
+      title: 'Report with confidence',
+      icon: '📈',
+      body: 'Deliver clear sustainability snapshots for leadership, auditors, and field teams.',
+      metric: 'Board-ready insights',
+      accent: 'from-fuchsia-500/20 to-fuchsia-400/5',
+    },
+  ];
+
+  const handleChallengeSubmit = () => {
+    const result = submitChallenge();
+    if (result === 'evidence-required') {
+      setUploadError('');
+      setSelectedFileName('');
+    }
+  };
+
+  const handleFile = (file) => {
+    if (!file) return;
+
+    const validation = validateEvidenceFile(file);
+    if (!validation.isValid) {
+      setUploadError(validation.reason);
+      setSelectedFileName('');
+      return;
+    }
+
+    setUploadError('');
+    setSelectedFileName(file.name);
+    attachEvidenceAndSubmit(file.name);
+  };
+
+  const handleExportSnapshot = () => {
+    // Export a human-friendly CSV snapshot that includes top-level metrics and judging criteria if present
+    const criteriaRaw = window.localStorage.getItem('ecosphere-criteria');
+    const criteria = criteriaRaw ? JSON.parse(criteriaRaw) : [];
+
+    const rows = [];
+    rows.push(['Snapshot generated', new Date().toISOString()]);
+    rows.push(['Overall score', overallScore]);
+    rows.push(['User XP', userXP]);
+    rows.push(['Data coverage', dataCoverage]);
+    rows.push(['Automation', automationLevel]);
+    rows.push([]);
+    rows.push(['Departments']);
+    rows.push(['Name', 'Env', 'Soc', 'Gov']);
+    departments.forEach((d) => rows.push([d.name, d.env, d.soc, d.gov]));
+    rows.push([]);
+    rows.push(['Compliance issues']);
+    rows.push(['Desc', 'Owner', 'Due', 'Status']);
+    complianceIssues.forEach((i) => rows.push([i.desc, i.owner, i.dueDate, i.status]));
+    rows.push([]);
+    if (criteria.length) {
+      rows.push(['Judging criteria']);
+      rows.push(['Title', 'Weight', 'Description']);
+      criteria.forEach((c) => rows.push([c.title, c.weight, c.desc]));
+    }
+
+    const csv = rows.map((r) => r.map((cell) => `"${String(cell ?? '')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ecosphere-snapshot-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+    setRecentNotification({ type: 'approval', message: 'Snapshot exported as CSV and ready for sharing.' });
+  };
+
+  const closeModal = () => {
+    setUploadError('');
+    setSelectedFileName('');
+    closeSubmissionModal();
+  };
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_30%),linear-gradient(135deg,_#020617_0%,_#0f172a_45%,_#111827_100%)] px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
@@ -42,8 +162,60 @@ function App() {
         />
       )}
 
+      {submissionModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-xl">
+          <div className="w-full max-w-lg rounded-[32px] border border-slate-700/70 bg-slate-900/85 p-8 shadow-2xl shadow-black/50">
+            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">Evidence required</p>
+            <h3 className="mt-2 text-2xl font-bold text-slate-100">Attach proof before approval</h3>
+            <p className="mt-3 text-sm text-slate-400">
+              The manager review flow is active. Upload a PDF, image, or Word document to continue the approval sequence.
+            </p>
+
+            <label
+              className={`mt-6 flex cursor-pointer flex-col items-center justify-center rounded-[24px] border-2 border-dashed p-8 text-center transition ${dragActive ? 'border-emerald-400 bg-emerald-500/10' : 'border-slate-700/70 bg-slate-950/70'}`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragActive(false);
+                handleFile(event.dataTransfer.files?.[0]);
+              }}
+            >
+              <input
+                type="file"
+                className="hidden"
+                onChange={(event) => handleFile(event.target.files?.[0])}
+              />
+              <div className="text-4xl">📦</div>
+              <p className="mt-4 text-sm font-semibold text-slate-200">Drag and drop evidence here</p>
+              <p className="mt-2 text-xs text-slate-500">or click to choose a file up to 5 MB</p>
+              {selectedFileName && <p className="mt-3 text-sm text-emerald-400">Attached: {selectedFileName}</p>}
+              {uploadError && <p className="mt-3 text-sm text-rose-400">{uploadError}</p>}
+            </label>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={closeModal}
+                className="rounded-2xl border border-slate-700/70 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleFile({ name: 'simulated-evidence.pdf', size: 240000, type: 'application/pdf' })}
+                className="rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+              >
+                Use Sample Evidence
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <header className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/25 backdrop-blur-xl">
+        <header className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/25 backdrop-blur-xl">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <p className="mb-2 text-sm font-semibold uppercase tracking-[0.3em] text-emerald-400">EcoSphere • Enterprise ESG Command Center</p>
@@ -57,19 +229,62 @@ function App() {
                 <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">XP balance</p>
                 <p className="text-2xl font-black text-amber-400">{userXP}</p>
               </div>
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-center">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">Data coverage</p>
+                <p className="text-xl font-black text-emerald-300">{dataCoverage}%</p>
+              </div>
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-center">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400">Automation</p>
+                <p className="text-xl font-black text-cyan-300">{automationLevel}%</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-200">Live sync state</p>
+              <p className="text-sm text-slate-400">Last update: {lastSyncLabel}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => setUserXP((prev) => prev + 60)}
-                className="rounded-2xl bg-emerald-500 px-4 py-3 font-semibold text-slate-950 transition hover:bg-emerald-400"
+                onClick={refreshLiveMetrics}
+                className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400/20"
               >
-                + Complete Challenge (+60 XP)
+                Refresh metrics
+              </button>
+              <button
+                onClick={handleExportSnapshot}
+                className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/20"
+              >
+                Export snapshot
               </button>
             </div>
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+          <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-400">Platform purpose</p>
+              <h2 className="text-2xl font-bold text-slate-100">Built to connect sustainability action with business outcomes</h2>
+            </div>
+            <p className="text-sm text-slate-400">EcoSphere turns ESG strategy into daily operational rhythm.</p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+            {platformPillars.map((pillar) => (
+              <div key={pillar.title} className={`rounded-3xl border border-slate-800/70 bg-gradient-to-br ${pillar.accent} p-4`}>
+                <div className="text-3xl">{pillar.icon}</div>
+                <h3 className="mt-3 text-lg font-semibold text-slate-100">{pillar.title}</h3>
+                <p className="mt-2 text-sm text-slate-300">{pillar.body}</p>
+                <p className="mt-4 text-sm font-semibold text-emerald-300">{pillar.metric}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="max-w-xl">
                   <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">Weighted ESG intelligence</p>
@@ -112,7 +327,7 @@ function App() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">3D ecosystem monitor</p>
@@ -127,7 +342,7 @@ function App() {
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.3em] text-emerald-400">Governance logs</p>
@@ -138,23 +353,79 @@ function App() {
                 </span>
               </div>
               <div className="space-y-3">
-                {complianceIssues.map((issue) => (
-                  <div key={issue.id} className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-slate-200">{issue.desc}</p>
-                        <p className="mt-1 text-xs text-slate-400">Owner: {issue.owner} • Due {issue.dueDate}</p>
+                {complianceIssues.map((issue) => {
+                  const isOverdue = issue.status === 'Overdue';
+                  const isResolved = issue.status === 'Resolved';
+                  const badgeClasses = isOverdue
+                    ? 'border border-rose-400/30 bg-rose-400/10 text-rose-300'
+                    : isResolved
+                      ? 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                      : 'border border-amber-400/20 bg-amber-400/10 text-amber-300';
+
+                  return (
+                    <div key={issue.id} className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-200">{issue.desc}</p>
+                          <p className="mt-1 text-xs text-slate-400">Owner: {issue.owner} • Due {issue.dueDate}</p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${badgeClasses}`}>
+                          {issue.status}
+                        </span>
                       </div>
-                      <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${issue.status === 'Overdue' ? 'border border-rose-400/30 bg-rose-400/10 text-rose-300' : 'border border-amber-400/20 bg-amber-400/10 text-amber-300'}`}>
-                        {issue.status}
-                      </span>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => updateIssueStatus(issue.id, 'Open')}
+                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Open' ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'}`}
+                        >
+                          Open
+                        </button>
+                        <button
+                          onClick={() => updateIssueStatus(issue.id, 'Overdue')}
+                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Overdue' ? 'bg-rose-400/20 text-rose-300' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'}`}
+                        >
+                          Overdue
+                        </button>
+                        <button
+                          onClick={() => updateIssueStatus(issue.id, 'Resolved')}
+                          className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${issue.status === 'Resolved' ? 'bg-emerald-400/20 text-emerald-300' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'}`}
+                        >
+                          Resolve
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+              <div className="mb-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">Challenge workflow</p>
+                <h3 className="text-xl font-bold text-slate-100">Submit work for manager review</h3>
+              </div>
+              <div className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4">
+                <p className="text-sm text-slate-400">
+                  {challengeStatus === 'reviewing'
+                    ? 'Your submission is under manager review and the interface is locked until approval completes.'
+                    : settings.evidenceRequired
+                      ? 'Evidence is required before the approval sequence can begin.'
+                      : 'Your challenge is ready to submit for approval.'}
+                </p>
+                <button
+                  onClick={handleChallengeSubmit}
+                  disabled={challengeStatus === 'reviewing' || pendingSubmission}
+                  className={`mt-4 w-full rounded-2xl px-4 py-3 font-semibold transition ${challengeStatus === 'reviewing' || pendingSubmission ? 'cursor-not-allowed bg-slate-800 text-slate-500' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'}`}
+                >
+                  {challengeStatus === 'reviewing' ? 'Under Review' : settings.evidenceRequired ? 'Submit With Evidence' : 'Submit Challenge'}
+                </button>
+                <div className="mt-3 text-xs text-slate-500">
+                  {challengeStatus === 'complete' ? 'Approval complete. XP awarded.' : 'Approval completes in ~2.5 seconds.'}
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
               <div className="mb-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-400">System controls</p>
                 <h3 className="text-xl font-bold text-slate-100">Operational rules</h3>
@@ -183,7 +454,7 @@ function App() {
           </div>
         </div>
 
-        <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl">
+        <section className="rounded-[28px] border border-slate-700/60 bg-slate-900/60 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
           <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.3em] text-amber-400">Gamified storefront</p>
@@ -200,17 +471,26 @@ function App() {
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             {rewardItems.map((item) => {
+              const isRedeemed = redeemedRewards.includes(item.name);
               const canAfford = userXP >= item.cost;
+              const stateLabel = isRedeemed ? 'Redeemed' : canAfford ? 'Available' : 'Locked';
+              const stateClasses = isRedeemed
+                ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
+                : canAfford
+                  ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-300'
+                  : 'border-slate-700/70 bg-slate-950/40 text-slate-500';
+
               return (
                 <button
                   key={item.name}
                   onClick={() => redeemReward(item.name, item.cost)}
-                  disabled={!canAfford}
-                  className={`rounded-2xl border p-4 text-left transition ${canAfford ? 'border-slate-700/70 bg-slate-950/70 hover:-translate-y-1 hover:border-cyan-400/40 hover:bg-slate-800/80' : 'cursor-not-allowed border-slate-800 bg-slate-950/40 opacity-60'}`}
+                  disabled={!canAfford || isRedeemed}
+                  className={`rounded-2xl border p-4 text-left transition ${isRedeemed || canAfford ? 'hover:-translate-y-1' : 'cursor-not-allowed'} ${stateClasses}`}
                 >
                   <div className="mb-3 text-3xl">{item.emoji}</div>
                   <p className="font-semibold text-slate-200">{item.name}</p>
                   <p className="mt-2 text-xs text-slate-400">{item.cost} XP</p>
+                  <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em]">{stateLabel}</p>
                 </button>
               );
             })}

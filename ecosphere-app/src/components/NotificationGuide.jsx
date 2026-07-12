@@ -11,7 +11,7 @@ export default function NotificationGuide({ message, type, onDismiss }) {
     gsap.fromTo(
       cardRef.current,
       { opacity: 0, y: 36, scale: 0.92 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: 'back.out(1.7)' }
+      { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: 'elastic.out(1, 0.5)' }
     );
 
     gsap.to(faceRef.current, {
@@ -33,7 +33,7 @@ export default function NotificationGuide({ message, type, onDismiss }) {
       className="fixed right-5 top-5 z-[60] flex max-w-sm items-center gap-3 rounded-2xl border border-emerald-400/30 bg-slate-950/90 p-4 shadow-2xl backdrop-blur"
     >
       <div ref={faceRef} className="flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/40 bg-gradient-to-br from-cyan-400/20 to-emerald-400/20 text-3xl">
-        {type === 'badge' ? '🏅' : type === 'reward' ? '🎁' : '⚡'}
+        {type === 'badge' ? '🏅' : type === 'reward' ? '🎁' : type === 'approval' ? '🧑‍💼' : '⚡'}
       </div>
       <div className="flex-1">
         <p className="text-sm font-semibold text-slate-100">{message}</p>
